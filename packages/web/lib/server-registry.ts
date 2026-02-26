@@ -81,6 +81,10 @@ export async function spawnForInstance(instance: ServerInstance): Promise<void> 
     stdio: ["ignore", "ignore", "pipe"],
   });
 
+  // Assign the handle immediately so stopInstance() can kill it even if it is
+  // called between this point and the orphan guard below.
+  instance.process = child;
+
   // Fix 5: Guard against orphaned process if instance was stopped before spawn completed
   if (instance.status === "stopped") {
     child.kill();
@@ -97,8 +101,6 @@ export async function spawnForInstance(instance: ServerInstance): Promise<void> 
   child.on("exit", () => {
     instance.status = "stopped";
   });
-
-  instance.process = child;
 
   // Wait briefly for startup
   await new Promise((r) => setTimeout(r, 2000));
