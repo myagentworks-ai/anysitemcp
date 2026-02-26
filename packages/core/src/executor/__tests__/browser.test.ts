@@ -101,4 +101,60 @@ describe("executeBrowserTool", () => {
     await expect(executeBrowserTool(navTool, {})).rejects.toThrow("Navigation failed");
     expect(mockBrowser.close).toHaveBeenCalled();
   });
+
+  it("fills input using static step.value when no paramRef", async () => {
+    const fillTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "fill", selector: "input[name=search]", value: "default text" },
+      ]},
+    };
+    await executeBrowserTool(fillTool, {});
+    expect(mockPage.fill).toHaveBeenCalledWith("input[name=search]", "default text");
+  });
+
+  it("executes click step", async () => {
+    const clickTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "click", selector: "button[type=submit]" },
+      ]},
+    };
+    await executeBrowserTool(clickTool, {});
+    expect(mockPage.click).toHaveBeenCalledWith("button[type=submit]");
+  });
+
+  it("executes waitFor step", async () => {
+    const waitTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "waitFor", selector: ".dashboard" },
+      ]},
+    };
+    await executeBrowserTool(waitTool, {});
+    expect(mockPage.waitForSelector).toHaveBeenCalledWith(".dashboard");
+  });
+
+  it("throws when navigate step is missing value", async () => {
+    const badTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [{ action: "navigate" }] },
+    };
+    await expect(executeBrowserTool(badTool, {})).rejects.toThrow('navigate step in tool "login" is missing required "value"');
+  });
+
+  it("throws when extract step element is not found", async () => {
+    mockPage.$ = vi.fn().mockResolvedValue(null);
+    const extractTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "extract", selector: ".missing-element" },
+      ]},
+    };
+    await expect(executeBrowserTool(extractTool, {})).rejects.toThrow('could not find element');
+  });
 });

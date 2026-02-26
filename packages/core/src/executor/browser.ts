@@ -17,23 +17,33 @@ export async function executeBrowserTool(
     for (const step of tool.browserConfig.steps) {
       switch (step.action) {
         case "navigate":
-          await page.goto(step.value!);
+          if (!step.value) throw new Error(`navigate step in tool "${tool.name}" is missing required "value"`);
+          await page.goto(step.value);
           break;
         case "fill": {
+          if (!step.selector) throw new Error(`fill step in tool "${tool.name}" is missing required "selector"`);
           const value = step.paramRef ? String(args[step.paramRef] ?? "") : step.value ?? "";
-          await page.fill(step.selector!, value);
+          await page.fill(step.selector, value);
           break;
         }
         case "click":
-          await page.click(step.selector!);
+          if (!step.selector) throw new Error(`click step in tool "${tool.name}" is missing required "selector"`);
+          await page.click(step.selector);
           break;
         case "waitFor":
-          await page.waitForSelector(step.selector!);
+          if (!step.selector) throw new Error(`waitFor step in tool "${tool.name}" is missing required "selector"`);
+          await page.waitForSelector(step.selector);
           break;
         case "extract": {
-          const el = await page.$(step.selector ?? "body");
-          extractedContent = await el?.textContent() ?? null;
+          const selector = step.selector ?? "body";
+          const el = await page.$(selector);
+          if (!el) throw new Error(`extract step in tool "${tool.name}" could not find element: "${selector}"`);
+          extractedContent = await el.textContent() ?? null;
           break;
+        }
+        default: {
+          const _exhaustive: never = step.action;
+          throw new Error(`Unknown browser step action: ${_exhaustive}`);
         }
       }
     }
