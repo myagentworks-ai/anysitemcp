@@ -31,6 +31,7 @@ export default function RootLayout({
         <nav className="border-b px-4 py-3 flex gap-4 text-sm">
           <Link href="/" className="font-semibold">AnySiteMCP</Link>
           <Link href="/servers" className="text-gray-500 hover:text-gray-900">Servers</Link>
+          <Link href="/integrations" className="text-gray-500 hover:text-gray-900">Integrations</Link>
         </nav>
         {children}
       </body>
