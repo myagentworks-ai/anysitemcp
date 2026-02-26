@@ -2,7 +2,37 @@ import { NextRequest } from "next/server";
 import { discover } from "@webmcp/core";
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { url } = await req.json() as { url: string };
+  let url: string;
+  try {
+    const body = await req.json() as { url?: unknown };
+    if (typeof body.url !== "string" || body.url.trim() === "") {
+      return new Response(JSON.stringify({ error: "Invalid request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    url = body.url;
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid request" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return new Response(
+        JSON.stringify({ error: "Invalid URL: must be http or https" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Invalid URL: must be http or https" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   const encoder = new TextEncoder();
 
@@ -22,11 +52,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
         send({ stage: 3, message: "Enriching with LLM..." });
 
-        const result = await discover(url);
+        const result = await Promise.race([
+          discover(url),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Discovery timed out after 60 seconds")), 60000)
+          ),
+        ]);
 
         send({ done: true, result });
       } catch (err) {
-        send({ error: (err as Error).message });
+        send({ error: err instanceof Error ? err.message : String(err) });
       } finally {
         controller.close();
       }
