@@ -1,4 +1,5 @@
 {
+  "// note": "Does not extend tsconfig.base.json intentionally — Next.js requires moduleResolution:bundler and module:preserve, incompatible with the NodeNext settings in the base config",
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
