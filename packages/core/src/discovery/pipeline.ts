@@ -26,6 +26,9 @@ export async function discover(
 
   // Stage 2: HTML analysis
   const pageRes = await fetchFn(url);
+  if (!pageRes.ok) {
+    return { tools: [], sourceUrl: url, discoveredVia: "html" };
+  }
   const html = await pageRes.text();
   const candidates = analyzeHtml(html, url);
 
@@ -33,7 +36,7 @@ export async function discover(
   if (options.skipLlm) {
     // Convert candidates to basic tools without LLM
     const tools = candidates.map((c) => ({
-      name: c.formAction.split("/").pop() ?? "form",
+      name: c.formAction.split("/").pop() || "form",
       description: `Submit ${c.submitLabel ?? "form"} at ${c.formAction}`,
       inputSchema: {
         type: "object" as const,
