@@ -1,6 +1,6 @@
 {
   "name": "@webmcp/cli",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha",
   "type": "module",
   "bin": { "webmcp": "./dist/index.js" },
   "scripts": {
