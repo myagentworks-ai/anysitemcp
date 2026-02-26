@@ -64,7 +64,7 @@ export default function Home() {
 
   return (
     <main className="max-w-2xl mx-auto py-16 px-4">
-      <h1 className="text-3xl font-bold mb-2">WebMCP</h1>
+      <h1 className="text-3xl font-bold mb-2">AnySiteMCP</h1>
       <p className="text-gray-500 mb-8">Turn any website into an MCP server for AI agents.</p>
 
       <div className="flex gap-2 mb-6">

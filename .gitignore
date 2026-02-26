@@ -1,6 +1,18 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 .next/
 *.tsbuildinfo
+
+# Environment variables — never commit secrets
 .env
 .env.local
+.env*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp

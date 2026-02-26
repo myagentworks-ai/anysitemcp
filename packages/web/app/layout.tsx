@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WebMCP",
+  title: "AnySiteMCP",
   description: "Turn any website into an MCP server for AI agents",
 };
 
@@ -29,7 +29,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <nav className="border-b px-4 py-3 flex gap-4 text-sm">
-          <Link href="/" className="font-semibold">WebMCP</Link>
+          <Link href="/" className="font-semibold">AnySiteMCP</Link>
           <Link href="/servers" className="text-gray-500 hover:text-gray-900">Servers</Link>
         </nav>
         {children}

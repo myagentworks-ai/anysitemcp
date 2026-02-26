@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 export async function connectStdio(server: McpServer): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("WebMCP server running on stdio");
+  console.error("AnySiteMCP server running on stdio");
 }
 
 const BODY_SIZE_LIMIT = 1_048_576; // 1 MB
@@ -51,6 +51,6 @@ export async function connectHttp(server: McpServer, port: number): Promise<void
 
   await server.connect(transport);
   httpServer.listen(port, () => {
-    console.error(`WebMCP server running at http://localhost:${port}/mcp`);
+    console.error(`AnySiteMCP server running at http://localhost:${port}/mcp`);
   });
 }
