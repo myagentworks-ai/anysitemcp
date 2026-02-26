@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import type { ServerInstance } from "@/lib/server-registry";
 
 interface Props {
@@ -6,6 +8,19 @@ interface Props {
 }
 
 export function ServerCard({ server, onStop }: Props) {
+  const [copyLabel, setCopyLabel] = useState("Copy");
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(server.connectionString);
+      setCopyLabel("Copied!");
+    } catch {
+      setCopyLabel("Failed");
+    } finally {
+      setTimeout(() => setCopyLabel("Copy"), 2000);
+    }
+  };
+
   return (
     <div className="border rounded-lg p-4">
       <div className="flex items-center justify-between mb-2">
@@ -22,16 +37,18 @@ export function ServerCard({ server, onStop }: Props) {
         <div className="flex items-center gap-2 mt-2">
           <code className="text-xs bg-gray-100 rounded px-2 py-1 flex-1">{server.connectionString}</code>
           <button
-            onClick={() => navigator.clipboard.writeText(server.connectionString)}
+            onClick={handleCopy}
+            aria-label="Copy connection string"
             className="text-xs text-blue-600 hover:underline"
           >
-            Copy
+            {copyLabel}
           </button>
         </div>
       )}
 
       <button
         onClick={() => onStop(server.id)}
+        aria-label={`Stop server ${server.url}`}
         className="mt-3 text-xs text-red-500 hover:underline"
       >
         Stop

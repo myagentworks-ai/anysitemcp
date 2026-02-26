@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { ServerCard } from "@/components/ServerCard";
 import type { ServerInstance } from "@/lib/server-registry";
 
@@ -7,27 +8,53 @@ export default function ServersPage() {
   const [servers, setServers] = useState<ServerInstance[]>([]);
   const [url, setUrl] = useState("");
   const [port, setPort] = useState("4000");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const load = async () => {
-    const res = await fetch("/api/servers");
-    if (res.ok) setServers(await res.json());
-  };
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/servers");
+      if (res.ok) setServers(await res.json());
+    } catch {
+      setError("Failed to load servers");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const start = async () => {
     const portNum = parseInt(port, 10);
-    await fetch("/api/servers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, port: portNum }),
-    });
-    await load();
+    if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+      setError("Port must be a number between 1024 and 65535");
+      return;
+    }
+    try {
+      setError("");
+      const res = await fetch("/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, port: portNum }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError((body as { error?: string }).error ?? "Failed to start server");
+        return;
+      }
+      await load();
+    } catch {
+      setError("Failed to start server");
+    }
   };
 
   const stop = async (id: string) => {
-    await fetch(`/api/servers/${id}`, { method: "DELETE" });
-    await load();
+    try {
+      await fetch(`/api/servers/${id}`, { method: "DELETE" });
+      await load();
+    } catch {
+      setError("Failed to stop server");
+    }
   };
 
   return (
@@ -43,11 +70,14 @@ export default function ServersPage() {
           className="flex-1 border rounded-lg px-3 py-2 text-sm"
         />
         <input
+          type="number"
           value={port}
           onChange={(e) => setPort(e.target.value)}
           placeholder="4000"
           aria-label="Port number"
-          className="w-20 border rounded-lg px-3 py-2 text-sm"
+          min={1024}
+          max={65535}
+          className="w-24 border rounded-lg px-3 py-2 text-sm"
         />
         <button
           onClick={start}
@@ -58,8 +88,12 @@ export default function ServersPage() {
         </button>
       </div>
 
+      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+
       <div className="space-y-3">
-        {servers.length === 0 ? (
+        {loading ? (
+          <p className="text-gray-400 text-sm">Loading...</p>
+        ) : servers.length === 0 ? (
           <p className="text-gray-400 text-sm">No servers running.</p>
         ) : (
           servers.map((s) => <ServerCard key={s.id} server={s} onStop={stop} />)
