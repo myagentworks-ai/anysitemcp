@@ -27,6 +27,28 @@ describe("executeHttpTool", () => {
     expect(result).toEqual({ results: ["shoe"] });
   });
 
+  it("does not produce double ? when url already contains query params", async () => {
+    const toolWithQuery: ToolDefinition = {
+      ...searchTool,
+      httpConfig: {
+        url: "https://api.example.com/search?version=2",
+        method: "GET",
+        paramMapping: { q: "q" },
+      },
+    };
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
+      headers: { get: () => "application/json" },
+    } as unknown as Response);
+
+    await executeHttpTool(toolWithQuery, { q: "shoes" }, mockFetch);
+
+    const calledUrl = mockFetch.mock.calls[0][0] as string;
+    expect(calledUrl).toBe("https://api.example.com/search?version=2&q=shoes");
+    expect(calledUrl.split("?").length - 1).toBe(1);
+  });
+
   it("sends params as JSON body for POST requests", async () => {
     const postTool: ToolDefinition = {
       ...searchTool,
@@ -49,8 +71,41 @@ describe("executeHttpTool", () => {
     );
   });
 
+  it("preserves original types in POST body (no String() coercion)", async () => {
+    const postTool: ToolDefinition = {
+      ...searchTool,
+      httpConfig: {
+        url: "https://api.example.com/submit",
+        method: "POST",
+        paramMapping: { flag: "flag", count: "count", tags: "tags" },
+      },
+    };
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+      headers: { get: () => "application/json" },
+    } as unknown as Response);
+
+    await executeHttpTool(postTool, { flag: true, count: 42, tags: [1, 2] }, mockFetch);
+
+    const calledBody = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(calledBody).toEqual({ flag: true, count: 42, tags: [1, 2] });
+  });
+
   it("throws when tool has no httpConfig", async () => {
     const badTool: ToolDefinition = { ...searchTool, httpConfig: undefined };
     await expect(executeHttpTool(badTool, {}, vi.fn())).rejects.toThrow("no httpConfig");
+  });
+
+  it("throws with HTTP status message when response is not ok", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+    } as unknown as Response);
+
+    await expect(
+      executeHttpTool(searchTool, { q: "shoes" }, mockFetch)
+    ).rejects.toThrow("HTTP 404");
   });
 });
