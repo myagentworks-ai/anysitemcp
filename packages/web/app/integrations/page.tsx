@@ -117,6 +117,75 @@ function StatusDot({ status, isLive }: { status: IntegrationRecord["status"]; is
 }
 
 // ---------------------------------------------------------------------------
+// ToolEntry — tool metadata + copy-able code snippet
+// ---------------------------------------------------------------------------
+
+function ToolEntry({
+  tool,
+  integrationName,
+}: {
+  tool: ToolDefinition;
+  integrationName: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const snippet = `const res = await fetch("/api/integrations/${integrationName}/call", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    tool: "${tool.name}",
+    params: {},
+  }),
+});
+const { result } = await res.json();`;
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(snippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="text-xs">
+      {/* Tool header */}
+      <div className="flex items-start gap-2 mb-1.5">
+        <span
+          className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+            tool.transport === "http"
+              ? "bg-blue-50 text-blue-500 border border-blue-100"
+              : "bg-purple-50 text-purple-500 border border-purple-100"
+          }`}
+        >
+          {tool.transport}
+        </span>
+        <div className="min-w-0">
+          <code className="font-semibold text-gray-800">{tool.name}</code>
+          {tool.description && (
+            <p className="text-gray-400 mt-0.5 leading-relaxed">{tool.description}</p>
+          )}
+        </div>
+      </div>
+      {/* Code snippet */}
+      <div className="relative group">
+        <pre className="bg-gray-900 text-gray-200 rounded-lg px-3 py-2.5 overflow-x-auto leading-relaxed font-mono text-[11px]">
+          <code>{snippet}</code>
+        </pre>
+        <button
+          onClick={copy}
+          className={`absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded transition-all ${
+            copied
+              ? "bg-emerald-600 text-white"
+              : "bg-gray-700 text-gray-300 opacity-0 group-hover:opacity-100 hover:bg-gray-600"
+          }`}
+        >
+          {copied ? "✓ copied" : "copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // IntegrationCard
 // ---------------------------------------------------------------------------
 
@@ -267,31 +336,19 @@ function IntegrationCard({
 
         {/* Expanded tools */}
         {tools && (
-          <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-4">
             {toolsIsStored && (
-              <p className="text-[11px] text-amber-500 mb-2 flex items-center gap-1">
+              <p className="text-[11px] text-amber-500 flex items-center gap-1">
                 <span>⚡</span>
                 <span>Last known tools — reconnect to refresh</span>
               </p>
             )}
             {tools.map((tool) => (
-              <div key={tool.name} className="flex items-start gap-2 text-xs">
-                <span
-                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                    tool.transport === "http"
-                      ? "bg-blue-50 text-blue-500 border border-blue-100"
-                      : "bg-purple-50 text-purple-500 border border-purple-100"
-                  }`}
-                >
-                  {tool.transport}
-                </span>
-                <div>
-                  <code className="font-semibold text-gray-800">{tool.name}</code>
-                  {tool.description && (
-                    <p className="text-gray-400 mt-0.5 leading-relaxed">{tool.description}</p>
-                  )}
-                </div>
-              </div>
+              <ToolEntry
+                key={tool.name}
+                tool={tool}
+                integrationName={integration.name}
+              />
             ))}
           </div>
         )}
