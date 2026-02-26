@@ -15,7 +15,7 @@ export interface BrowserStep {
 
 export interface HttpConfig {
   url: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   paramMapping: Record<string, string>; // toolParam -> queryParam or bodyField
 }
 
