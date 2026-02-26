@@ -12,6 +12,9 @@ function jsonSchemaToZod(schema: ToolDefinition["inputSchema"]): Record<string, 
       case "number":
         zodType = z.number();
         break;
+      case "integer":
+        zodType = z.number().int();
+        break;
       case "boolean":
         zodType = z.boolean();
         break;
@@ -40,17 +43,25 @@ export function createMcpServer(tools: ToolDefinition[]): McpServer {
       async (args) => {
         try {
           let result: unknown;
-          if (tool.transport === "http") {
-            result = await executeHttpTool(tool, args as Record<string, unknown>);
-          } else {
-            result = await executeBrowserTool(tool, args as Record<string, unknown>);
+          switch (tool.transport) {
+            case "http":
+              result = await executeHttpTool(tool, args as Record<string, unknown>);
+              break;
+            case "browser":
+              result = await executeBrowserTool(tool, args as Record<string, unknown>);
+              break;
+            default: {
+              const _exhaustive: never = tool.transport;
+              throw new Error(`Unknown transport: ${_exhaustive}`);
+            }
           }
           return {
             content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
           };
         } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
           return {
-            content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
+            content: [{ type: "text" as const, text: `Error: ${message}` }],
             isError: true,
           };
         }
