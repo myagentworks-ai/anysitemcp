@@ -61,8 +61,9 @@ export async function spawnForInstance(instance: ServerInstance): Promise<void> 
   // resolve the result as a module import.  The MCP_SERVER_PATH env var
   // allows overriding this at runtime (e.g., in production deploys).
   const segments: string[] = [process.cwd(), "..", "mcp-server", "dist", "index.js"];
+  // Fix 6: Remove redundant cast — process.env["MCP_SERVER_PATH"] is already string | undefined
   const serverPath: string =
-    (process.env["MCP_SERVER_PATH"] as string | undefined) ??
+    process.env["MCP_SERVER_PATH"] ??
     join(...(segments as [string, ...string[]]));
 
   const args: string[] = [
@@ -74,10 +75,17 @@ export async function spawnForInstance(instance: ServerInstance): Promise<void> 
     String(instance.port),
   ];
 
+  // Fix 4: stdout set to "ignore" — it is not consumed, only stderr is used
   const child = spawn("node", [serverPath, ...args], {
     env: { ...process.env },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "ignore", "pipe"],
   });
+
+  // Fix 5: Guard against orphaned process if instance was stopped before spawn completed
+  if (instance.status === "stopped") {
+    child.kill();
+    return;
+  }
 
   child.stderr?.on("data", (data: Buffer) => {
     instance.logs.push(data.toString());
