@@ -27,6 +27,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <nav className="border-b px-4 py-3 flex gap-4 text-sm">
+          <a href="/" className="font-semibold">WebMCP</a>
+          <a href="/servers" className="text-gray-500 hover:text-gray-900">Servers</a>
+        </nav>
         {children}
       </body>
     </html>
