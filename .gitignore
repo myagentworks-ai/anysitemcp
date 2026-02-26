@@ -11,6 +11,9 @@ dist/
 .env.local
 .env*.local
 
+# User data (integration store, etc.) — keep the dir, ignore the data file
+packages/web/data/*.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

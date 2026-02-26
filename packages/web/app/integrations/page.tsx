@@ -1,14 +1,22 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
-interface IntegrationSummary {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface IntegrationRecord {
   name: string;
   url: string;
   description?: string;
   toolCount: number;
   connectedAt: string;
-  status: "connected" | "error";
+  status: "connected" | "error" | "saved";
   error?: string;
+  notes: string;
+  isLive: boolean;
+  savedAt?: string;
+  lastStatus?: "connected" | "error";
 }
 
 interface ToolDefinition {
@@ -17,117 +25,450 @@ interface ToolDefinition {
   transport: "http" | "browser";
 }
 
-interface ToolsDetail {
-  tools: ToolDefinition[];
+// ---------------------------------------------------------------------------
+// NotesEditor — debounced auto-save with visual feedback
+// ---------------------------------------------------------------------------
+
+function NotesEditor({
+  integration,
+  onSaved,
+}: {
+  integration: IntegrationRecord;
+  onSaved: () => void;
+}) {
+  const [notes, setNotes] = useState(integration.notes ?? "");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persist = useCallback(
+    async (value: string) => {
+      setSaveState("saving");
+      try {
+        await fetch(`/api/integrations/${integration.name}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: value }),
+        });
+        setSaveState("saved");
+        onSaved();
+        setTimeout(() => setSaveState("idle"), 2500);
+      } catch {
+        setSaveState("idle");
+      }
+    },
+    [integration.name, onSaved]
+  );
+
+  const handleChange = (value: string) => {
+    setNotes(value);
+    setSaveState("idle");
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => persist(value), 800);
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-dashed border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold tracking-wide uppercase text-gray-400">
+          Notes
+        </span>
+        <span
+          className={`text-[11px] transition-opacity duration-300 ${
+            saveState === "saving"
+              ? "text-gray-400 opacity-100"
+              : saveState === "saved"
+              ? "text-emerald-500 opacity-100"
+              : "opacity-0"
+          }`}
+        >
+          {saveState === "saving" ? "Saving…" : "✓ Saved"}
+        </span>
+      </div>
+      <textarea
+        value={notes}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder="Add notes, credentials hints, integration details…"
+        rows={3}
+        className="w-full text-xs border border-amber-100 rounded-lg px-3 py-2 resize-none bg-amber-50/40
+          placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-200
+          focus:border-amber-300 transition-all leading-relaxed text-gray-700"
+      />
+    </div>
+  );
 }
 
-export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+// ---------------------------------------------------------------------------
+// Status indicator dot
+// ---------------------------------------------------------------------------
 
-  // Add form state
+function StatusDot({ status, isLive }: { status: IntegrationRecord["status"]; isLive: boolean }) {
+  if (isLive && status === "connected") {
+    return (
+      <span className="relative inline-flex h-2 w-2 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+      </span>
+    );
+  }
+  if (status === "error") {
+    return <span className="inline-block w-2 h-2 rounded-full bg-red-400 shrink-0" />;
+  }
+  return <span className="inline-block w-2 h-2 rounded-full bg-amber-300 shrink-0" />;
+}
+
+// ---------------------------------------------------------------------------
+// IntegrationCard
+// ---------------------------------------------------------------------------
+
+function IntegrationCard({
+  integration,
+  onRefresh,
+  onRemove,
+  onReconnect,
+  reconnecting,
+}: {
+  integration: IntegrationRecord;
+  onRefresh: () => void;
+  onRemove: (name: string) => void;
+  onReconnect: (i: IntegrationRecord) => void;
+  reconnecting: boolean;
+}) {
+  const [tools, setTools] = useState<ToolDefinition[] | null>(null);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+
+  const isLive = integration.isLive && integration.status === "connected";
+  const isError = integration.status === "error";
+  const isSavedOffline = !integration.isLive;
+
+  const toggleTools = async () => {
+    if (tools) {
+      setTools(null);
+      return;
+    }
+    setToolsLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/${integration.name}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTools(data.tools);
+      }
+    } catch {
+      /* silently fail */
+    } finally {
+      setToolsLoading(false);
+    }
+  };
+
+  const borderColor = isLive
+    ? "border-l-emerald-400"
+    : isError
+    ? "border-l-red-400"
+    : "border-l-amber-300";
+
+  return (
+    <div
+      className={`border border-l-4 ${borderColor} rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow`}
+    >
+      <div className="p-4">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {/* Name + badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <StatusDot status={integration.status} isLive={integration.isLive} />
+              <span className="font-semibold text-sm text-gray-900">{integration.name}</span>
+
+              {isLive && (
+                <span className="px-2 py-0.5 text-[11px] rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 font-medium">
+                  {integration.toolCount} tool{integration.toolCount !== 1 ? "s" : ""} · live
+                </span>
+              )}
+              {isError && (
+                <span className="px-2 py-0.5 text-[11px] rounded-full bg-red-50 text-red-600 border border-red-100 font-medium">
+                  error
+                </span>
+              )}
+              {isSavedOffline && (
+                <span className="px-2 py-0.5 text-[11px] rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-medium">
+                  saved
+                  {integration.lastStatus === "connected" && integration.toolCount > 0
+                    ? ` · ${integration.toolCount} tools`
+                    : ""}
+                </span>
+              )}
+              {integration.notes?.trim() && (
+                <span
+                  title="Has notes"
+                  className="text-amber-400 text-xs select-none"
+                >
+                  ✦
+                </span>
+              )}
+            </div>
+
+            {/* URL */}
+            <p className="text-[11px] text-gray-400 mt-1 truncate font-mono">{integration.url}</p>
+
+            {/* Description */}
+            {integration.description && (
+              <p className="text-xs text-gray-500 mt-0.5">{integration.description}</p>
+            )}
+
+            {/* Error message */}
+            {integration.error && (
+              <p className="text-[11px] text-red-400 mt-1 font-mono leading-relaxed">
+                {integration.error}
+              </p>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 shrink-0 pt-0.5">
+            {isLive && integration.toolCount > 0 && (
+              <button
+                onClick={toggleTools}
+                className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
+              >
+                {toolsLoading ? "…" : tools ? "hide tools" : "tools"}
+              </button>
+            )}
+            <button
+              onClick={() => setNotesOpen((o) => !o)}
+              className={`text-xs transition-colors ${
+                notesOpen
+                  ? "text-amber-500 font-medium"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              notes
+            </button>
+            {isSavedOffline && (
+              <button
+                onClick={() => onReconnect(integration)}
+                disabled={reconnecting}
+                className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {reconnecting ? "connecting…" : "reconnect"}
+              </button>
+            )}
+            <button
+              onClick={() => onRemove(integration.name)}
+              aria-label={`Remove ${integration.name}`}
+              className="text-xs text-gray-300 hover:text-red-400 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded tools */}
+        {tools && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+            {tools.map((tool) => (
+              <div key={tool.name} className="flex items-start gap-2 text-xs">
+                <span
+                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                    tool.transport === "http"
+                      ? "bg-blue-50 text-blue-500 border border-blue-100"
+                      : "bg-purple-50 text-purple-500 border border-purple-100"
+                  }`}
+                >
+                  {tool.transport}
+                </span>
+                <div>
+                  <code className="font-semibold text-gray-800">{tool.name}</code>
+                  {tool.description && (
+                    <p className="text-gray-400 mt-0.5 leading-relaxed">{tool.description}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Notes */}
+        {notesOpen && <NotesEditor integration={integration} onSaved={onRefresh} />}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function IntegrationsPage() {
+  const [integrations, setIntegrations] = useState<IntegrationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+
+  // Add-integration form
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [reconnectingName, setReconnectingName] = useState<string | null>(null);
   const [addError, setAddError] = useState("");
-
-  // Expanded tools per card
-  const [expandedTools, setExpandedTools] = useState<Record<string, ToolDefinition[]>>({});
-  const [expandLoading, setExpandLoading] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/integrations");
       if (res.ok) setIntegrations(await res.json());
     } catch {
-      setError("Failed to load integrations");
+      setPageError("Failed to load integrations");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const connect = async () => {
-    if (!name.trim() || !url.trim()) return;
-    setConnecting(true);
-    setAddError("");
+  /** Connect a new integration or reconnect a saved one */
+  const connect = async (config?: {
+    name: string;
+    url: string;
+    description?: string;
+  }) => {
+    const n = config?.name ?? name.trim();
+    const u = config?.url ?? url.trim();
+    const d = config?.description ?? (description.trim() || undefined);
+
+    if (!n || !u) return;
+
+    if (config) {
+      setReconnectingName(n);
+    } else {
+      setConnecting(true);
+      setAddError("");
+    }
+
     try {
       const res = await fetch("/api/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), url: url.trim(), description: description.trim() || undefined }),
+        body: JSON.stringify({ name: n, url: u, description: d }),
       });
       const data = await res.json();
-      if (!res.ok && res.status !== 200) {
-        setAddError(data.error ?? "Failed to connect");
+      if (res.status >= 400) {
+        if (!config) setAddError(data.error ?? "Failed to connect");
         return;
       }
-      setName("");
-      setUrl("");
-      setDescription("");
+      if (!config) {
+        setName("");
+        setUrl("");
+        setDescription("");
+      }
       await load();
     } catch {
-      setAddError("Failed to connect");
+      if (!config) setAddError("Network error — could not connect");
     } finally {
       setConnecting(false);
+      setReconnectingName(null);
     }
   };
 
   const remove = async (integrationName: string) => {
     try {
       await fetch(`/api/integrations/${integrationName}`, { method: "DELETE" });
-      setExpandedTools((prev) => { const next = { ...prev }; delete next[integrationName]; return next; });
       await load();
     } catch {
-      setError("Failed to remove integration");
+      setPageError("Failed to remove integration");
     }
   };
 
-  const toggleTools = async (integrationName: string) => {
-    if (expandedTools[integrationName]) {
-      setExpandedTools((prev) => { const next = { ...prev }; delete next[integrationName]; return next; });
-      return;
-    }
-    setExpandLoading((prev) => ({ ...prev, [integrationName]: true }));
-    try {
-      const res = await fetch(`/api/integrations/${integrationName}`);
-      if (res.ok) {
-        const data: ToolsDetail = await res.json();
-        setExpandedTools((prev) => ({ ...prev, [integrationName]: data.tools }));
-      }
-    } catch {
-      // silently fail — user can retry
-    } finally {
-      setExpandLoading((prev) => ({ ...prev, [integrationName]: false }));
-    }
-  };
+  // Derived stats
+  const liveCount = integrations.filter((i) => i.isLive && i.status === "connected").length;
+  const savedCount = integrations.length;
+  const withNotesCount = integrations.filter((i) => i.notes?.trim()).length;
+
+  const firstLive = integrations.find((i) => i.isLive && i.status === "connected");
 
   return (
-    <main className="max-w-2xl mx-auto py-16 px-4">
-      <h1 className="text-2xl font-bold mb-2">Integrations</h1>
-      <p className="text-gray-500 text-sm mb-8">Connect to external sites and call their tools from your application.</p>
+    <main className="max-w-3xl mx-auto py-10 px-4">
+      {/* ------------------------------------------------------------------ */}
+      {/* Header                                                              */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">
+          Integrations
+        </h1>
+        <p className="text-sm text-gray-500">
+          Connect external sites, discover their tools, and call them from your application.
+          All integrations are saved and survive server restarts.
+        </p>
+      </div>
 
-      {/* Add Integration */}
-      <div className="border rounded-lg p-4 mb-8 bg-gray-50">
-        <h2 className="text-sm font-semibold mb-3">Connect a site</h2>
-        <div className="space-y-2">
-          <div className="flex gap-2">
+      {/* ------------------------------------------------------------------ */}
+      {/* Stats bar                                                           */}
+      {/* ------------------------------------------------------------------ */}
+      {savedCount > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-8">
+          {[
+            {
+              label: "Total saved",
+              value: savedCount,
+              valueClass: "text-gray-900",
+            },
+            {
+              label: "Live now",
+              value: liveCount,
+              valueClass: liveCount > 0 ? "text-emerald-600" : "text-gray-300",
+            },
+            {
+              label: "With notes",
+              value: withNotesCount,
+              valueClass: withNotesCount > 0 ? "text-amber-500" : "text-gray-300",
+            },
+          ].map(({ label, value, valueClass }) => (
+            <div
+              key={label}
+              className="border rounded-xl px-4 py-3 bg-white shadow-sm"
+            >
+              <div className={`text-2xl font-bold tabular-nums ${valueClass}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-gray-400 mt-0.5 font-medium tracking-wide uppercase">
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Add integration form                                                */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="border rounded-xl p-5 mb-8 bg-white shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Connect a site</h2>
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-[140px_1fr] gap-2">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Name (e.g. shopify)"
+              placeholder="Name"
               aria-label="Integration name"
-              className="w-36 border rounded-lg px-3 py-2 text-sm bg-white"
+              className="border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:bg-white
+                focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300
+                transition-all placeholder:text-gray-300"
             />
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com"
               aria-label="Site URL"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
+              onKeyDown={(e) =>
+                e.key === "Enter" &&
+                !connecting &&
+                name.trim() &&
+                url.trim() &&
+                connect()
+              }
+              className="border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:bg-white
+                focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300
+                transition-all placeholder:text-gray-300"
             />
           </div>
           <div className="flex gap-2">
@@ -136,111 +477,87 @@ export default function IntegrationsPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Description (optional)"
               aria-label="Description"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:bg-white
+                focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300
+                transition-all placeholder:text-gray-300"
             />
             <button
-              onClick={connect}
+              onClick={() => connect()}
               disabled={connecting || !name.trim() || !url.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
+              className="px-5 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium
+                disabled:opacity-40 hover:bg-gray-700 active:scale-95 transition-all
+                whitespace-nowrap"
             >
-              {connecting ? "Connecting..." : "Connect"}
+              {connecting ? "Connecting…" : "Connect"}
             </button>
           </div>
         </div>
-        {addError && <p className="text-red-500 text-xs mt-2">{addError}</p>}
+        {addError && <p className="text-red-500 text-xs mt-2.5">{addError}</p>}
       </div>
 
-      {/* List */}
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-      <div className="space-y-3">
-        {loading ? (
-          <p className="text-gray-400 text-sm">Loading...</p>
-        ) : integrations.length === 0 ? (
-          <p className="text-gray-400 text-sm">No integrations yet. Connect a site above.</p>
-        ) : (
-          integrations.map((integration) => (
-            <div key={integration.name} className="border rounded-lg p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm">{integration.name}</span>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      integration.status === "connected"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-600"
-                    }`}>
-                      {integration.status === "connected" ? `${integration.toolCount} tools` : "error"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">{integration.url}</p>
-                  {integration.description && (
-                    <p className="text-xs text-gray-400 mt-0.5">{integration.description}</p>
-                  )}
-                  {integration.error && (
-                    <p className="text-xs text-red-500 mt-1">{integration.error}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {integration.status === "connected" && integration.toolCount > 0 && (
-                    <button
-                      onClick={() => toggleTools(integration.name)}
-                      className="text-xs text-blue-600 hover:underline"
-                    >
-                      {expandLoading[integration.name]
-                        ? "Loading..."
-                        : expandedTools[integration.name]
-                        ? "Hide tools"
-                        : "View tools"}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => remove(integration.name)}
-                    aria-label={`Remove ${integration.name}`}
-                    className="text-xs text-red-500 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
+      {/* ------------------------------------------------------------------ */}
+      {/* Integrations list                                                   */}
+      {/* ------------------------------------------------------------------ */}
+      {pageError && (
+        <p className="text-red-500 text-sm mb-4">{pageError}</p>
+      )}
+
+      {loading ? (
+        /* Skeleton */
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="border rounded-xl p-4 animate-pulse bg-white">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-gray-100" />
+                <div className="h-4 bg-gray-100 rounded w-28" />
+                <div className="h-4 bg-gray-100 rounded w-16" />
               </div>
-
-              {/* Expanded tools */}
-              {expandedTools[integration.name] && (
-                <div className="mt-3 space-y-1.5 border-t pt-3">
-                  {expandedTools[integration.name].map((tool) => (
-                    <div key={tool.name} className="flex items-start gap-2 text-xs">
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded font-mono uppercase ${
-                        tool.transport === "http"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-purple-100 text-purple-700"
-                      }`}>
-                        {tool.transport}
-                      </span>
-                      <div>
-                        <code className="font-semibold">{tool.name}</code>
-                        <p className="text-gray-500 mt-0.5">{tool.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="h-3 bg-gray-100 rounded w-64" />
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : integrations.length === 0 ? (
+        /* Empty state */
+        <div className="border-2 border-dashed rounded-xl p-12 text-center">
+          <p className="text-gray-400 text-sm">No integrations yet.</p>
+          <p className="text-gray-300 text-xs mt-1">
+            Connect your first site above — it will be saved automatically.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {integrations.map((integration) => (
+            <IntegrationCard
+              key={integration.name}
+              integration={integration}
+              onRefresh={load}
+              onRemove={remove}
+              onReconnect={connect}
+              reconnecting={reconnectingName === integration.name}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Usage snippet */}
-      {integrations.some((i) => i.status === "connected") && (
-        <div className="mt-8 border rounded-lg p-4 bg-gray-50">
-          <h2 className="text-sm font-semibold mb-2">Call a tool from your app</h2>
-          <pre className="text-xs bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto"><code>{`// POST /api/integrations/{name}/call
-fetch("/api/integrations/${integrations.find((i) => i.status === "connected")?.name ?? "mysite"}/call", {
+      {/* ------------------------------------------------------------------ */}
+      {/* Code snippet                                                        */}
+      {/* ------------------------------------------------------------------ */}
+      {firstLive && (
+        <div className="mt-8 border rounded-xl p-5 bg-gray-50">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">
+            Call a tool from your app
+          </h2>
+          <pre className="text-xs bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto leading-relaxed">
+            <code>{`const res = await fetch("/api/integrations/${firstLive.name}/call", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     tool: "tool_name",
-    params: { key: "value" }
-  })
-})`}</code></pre>
+    params: { key: "value" },
+  }),
+});
+const { result } = await res.json();`}</code>
+          </pre>
         </div>
       )}
     </main>

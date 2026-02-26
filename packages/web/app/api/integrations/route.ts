@@ -1,22 +1,52 @@
 import { NextResponse } from "next/server";
 import { getHub } from "@/lib/integration-registry";
+import { getSavedIntegrations, saveIntegration } from "@/lib/integration-store";
 import type { IntegrationConfig } from "@/lib/integration-registry";
 
-// GET /api/integrations — list all integrations
+// GET /api/integrations — merged live hub + persisted store
 export async function GET() {
-  const entries = getHub().getAll().map(({ config, tools, connectedAt, status, error }) => ({
-    name: config.name,
-    url: config.url,
-    description: config.description,
-    toolCount: tools.length,
-    connectedAt,
-    status,
-    error,
-  }));
-  return NextResponse.json(entries);
+  const liveEntries = getHub().getAll();
+  const savedEntries = getSavedIntegrations();
+  const liveNames = new Set(liveEntries.map((e) => e.config.name));
+
+  // Live entries (currently active in this process)
+  const live = liveEntries.map(({ config, tools, connectedAt, status, error }) => {
+    const saved = savedEntries.find((s) => s.name === config.name);
+    return {
+      name: config.name,
+      url: config.url,
+      description: config.description,
+      toolCount: tools.length,
+      connectedAt,
+      status,
+      error,
+      notes: saved?.notes ?? "",
+      isLive: true,
+      savedAt: saved?.createdAt,
+    };
+  });
+
+  // Saved-only entries (persisted but not in the current process — e.g. after a restart)
+  const savedOnly = savedEntries
+    .filter((s) => !liveNames.has(s.name))
+    .map((s) => ({
+      name: s.name,
+      url: s.url,
+      description: s.description,
+      toolCount: s.lastToolCount ?? 0,
+      connectedAt: s.lastConnectedAt ?? s.createdAt,
+      status: "saved" as const,
+      error: undefined as string | undefined,
+      notes: s.notes ?? "",
+      isLive: false,
+      savedAt: s.createdAt,
+      lastStatus: s.lastStatus,
+    }));
+
+  return NextResponse.json([...live, ...savedOnly]);
 }
 
-// POST /api/integrations — add a new integration
+// POST /api/integrations — connect a site and persist it
 export async function POST(req: Request) {
   let body: unknown;
   try {
@@ -45,13 +75,29 @@ export async function POST(req: Request) {
   }
 
   const entry = await getHub().connect({ name, url, description, skipLlm: !!skipLlm });
-  return NextResponse.json({
+
+  // Persist every connect attempt (success or error) so it appears in the saved list
+  saveIntegration({
     name: entry.config.name,
     url: entry.config.url,
     description: entry.config.description,
+    status: entry.status,
     toolCount: entry.tools.length,
     connectedAt: entry.connectedAt,
-    status: entry.status,
     error: entry.error,
-  }, { status: entry.status === "connected" ? 201 : 200 });
+  });
+
+  return NextResponse.json(
+    {
+      name: entry.config.name,
+      url: entry.config.url,
+      description: entry.config.description,
+      toolCount: entry.tools.length,
+      connectedAt: entry.connectedAt,
+      status: entry.status,
+      error: entry.error,
+      isLive: true,
+    },
+    { status: entry.status === "connected" ? 201 : 200 }
+  );
 }
