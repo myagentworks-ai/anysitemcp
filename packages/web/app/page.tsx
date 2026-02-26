@@ -17,30 +17,49 @@ export default function Home() {
     setTools([]);
     setError("");
     setStage(1);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
 
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
-
-    const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const lines = decoder.decode(value).split("\n");
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = JSON.parse(line.slice(6));
-        if (data.stage) { setStage(data.stage); setStageMsg(data.message); }
-        if (data.done) setTools(data.result.tools);
-        if (data.error) setError(data.error);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `Request failed: ${res.statusText}`);
       }
+
+      if (!res.body) throw new Error("Response body is not readable");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const event of events) {
+          const line = event.trim();
+          if (!line.startsWith("data: ")) continue;
+          let data: { stage?: number; message?: string; done?: boolean; result?: { tools: unknown[] }; error?: string };
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            continue;
+          }
+          if (data.stage) { setStage(data.stage); setStageMsg(data.message ?? ""); }
+          if (data.done && data.result?.tools) setTools(data.result.tools as ToolDefinition[]);
+          if (data.error) setError(data.error);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+      setStage(0);
     }
-    setLoading(false);
-    setStage(0);
   };
 
   return (
@@ -50,12 +69,14 @@ export default function Home() {
 
       <div className="flex gap-2 mb-6">
         <input
+          id="url-input"
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => { setUrl(e.target.value); if (error) setError(""); }}
           placeholder="https://example.com"
+          aria-label="Website URL to analyze"
           className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          onKeyDown={(e) => e.key === "Enter" && analyze()}
+          onKeyDown={(e) => e.key === "Enter" && !loading && url && analyze()}
         />
         <button
           onClick={analyze}
