@@ -1,21 +1,38 @@
 import { NextResponse } from "next/server";
 import { getHub } from "@/lib/integration-registry";
-import { deleteSavedIntegration, updateNotes, getSavedIntegrations } from "@/lib/integration-store";
+import {
+  deleteSavedIntegration,
+  updateNotes,
+  getSavedIntegrations,
+  saveIntegration,
+} from "@/lib/integration-store";
 
 type RouteContext = { params: Promise<{ name: string }> };
 
-// GET /api/integrations/:name — get tools for a live integration
+// GET /api/integrations/:name — get tools (live from hub, or last-known from store)
 export async function GET(_req: Request, { params }: RouteContext) {
   const { name } = await params;
   const entry = getHub().get(name);
-  if (!entry) {
+  if (entry) {
+    return NextResponse.json({
+      name: entry.config.name,
+      url: entry.config.url,
+      tools: entry.tools,
+      status: entry.status,
+      isStored: false,
+    });
+  }
+  // Fall back to stored tool definitions so offline integrations can still show tools
+  const saved = getSavedIntegrations().find((s) => s.name === name);
+  if (!saved || !saved.tools?.length) {
     return NextResponse.json({ error: `Integration "${name}" not found` }, { status: 404 });
   }
   return NextResponse.json({
-    name: entry.config.name,
-    url: entry.config.url,
-    tools: entry.tools,
-    status: entry.status,
+    name: saved.name,
+    url: saved.url,
+    tools: saved.tools,
+    status: "saved",
+    isStored: true,
   });
 }
 
@@ -38,14 +55,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   // Try to update existing record
   const updated = updateNotes(name, notes);
   if (!updated) {
-    // Integration exists in hub but hasn't been persisted yet — shouldn't happen
-    // in normal flow, but guard anyway
+    // Integration exists in hub but hasn't been persisted yet — guard against race
     const entry = getHub().get(name);
     if (!entry) {
       return NextResponse.json({ error: `Integration "${name}" not found` }, { status: 404 });
     }
-    // Persist it first then update notes
-    const { saveIntegration } = await import("@/lib/integration-store");
+    // Persist it first, then update notes
     saveIntegration({
       name: entry.config.name,
       url: entry.config.url,
@@ -54,6 +69,11 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       toolCount: entry.tools.length,
       connectedAt: entry.connectedAt,
       error: entry.error,
+      tools: entry.tools.map((t) => ({
+        name: t.name,
+        description: t.description ?? "",
+        transport: t.transport,
+      })),
     });
     updateNotes(name, notes);
   }

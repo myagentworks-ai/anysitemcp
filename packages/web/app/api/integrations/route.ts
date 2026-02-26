@@ -85,6 +85,11 @@ export async function POST(req: Request) {
     toolCount: entry.tools.length,
     connectedAt: entry.connectedAt,
     error: entry.error,
+    tools: entry.tools.map((t) => ({
+      name: t.name,
+      description: t.description ?? "",
+      transport: t.transport,
+    })),
   });
 
   return NextResponse.json(

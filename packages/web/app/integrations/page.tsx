@@ -134,6 +134,7 @@ function IntegrationCard({
   reconnecting: boolean;
 }) {
   const [tools, setTools] = useState<ToolDefinition[] | null>(null);
+  const [toolsIsStored, setToolsIsStored] = useState(false);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
 
@@ -144,6 +145,7 @@ function IntegrationCard({
   const toggleTools = async () => {
     if (tools) {
       setTools(null);
+      setToolsIsStored(false);
       return;
     }
     setToolsLoading(true);
@@ -152,6 +154,7 @@ function IntegrationCard({
       if (res.ok) {
         const data = await res.json();
         setTools(data.tools);
+        setToolsIsStored(!!data.isStored);
       }
     } catch {
       /* silently fail */
@@ -225,7 +228,7 @@ function IntegrationCard({
 
           {/* Action buttons */}
           <div className="flex items-center gap-3 shrink-0 pt-0.5">
-            {isLive && integration.toolCount > 0 && (
+            {integration.toolCount > 0 && (
               <button
                 onClick={toggleTools}
                 className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
@@ -265,6 +268,12 @@ function IntegrationCard({
         {/* Expanded tools */}
         {tools && (
           <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+            {toolsIsStored && (
+              <p className="text-[11px] text-amber-500 mb-2 flex items-center gap-1">
+                <span>⚡</span>
+                <span>Last known tools — reconnect to refresh</span>
+              </p>
+            )}
             {tools.map((tool) => (
               <div key={tool.name} className="flex items-start gap-2 text-xs">
                 <span

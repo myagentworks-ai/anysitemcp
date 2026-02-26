@@ -5,6 +5,12 @@ import path from "path";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface StoredTool {
+  name: string;
+  description: string;
+  transport: string;
+}
+
 export interface StoredIntegration {
   name: string;
   url: string;
@@ -16,6 +22,7 @@ export interface StoredIntegration {
   lastToolCount?: number;
   lastConnectedAt?: string;
   lastError?: string;
+  tools?: StoredTool[];
 }
 
 interface Store {
@@ -75,6 +82,7 @@ export function saveIntegration(record: {
   toolCount: number;
   connectedAt: string;
   error?: string;
+  tools?: StoredTool[];
 }): void {
   const store = loadStore();
   const now = new Date().toISOString();
@@ -87,6 +95,7 @@ export function saveIntegration(record: {
     existing.lastToolCount = record.toolCount;
     existing.lastConnectedAt = record.connectedAt;
     existing.lastError = record.error;
+    if (record.tools) existing.tools = record.tools;
     existing.updatedAt = now;
   } else {
     store.integrations.push({
@@ -99,6 +108,7 @@ export function saveIntegration(record: {
       lastToolCount: record.toolCount,
       lastConnectedAt: record.connectedAt,
       lastError: record.error,
+      tools: record.tools,
     });
   }
   persistStore(store);
