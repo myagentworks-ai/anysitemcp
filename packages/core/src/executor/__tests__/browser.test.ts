@@ -157,4 +157,61 @@ describe("executeBrowserTool", () => {
     };
     await expect(executeBrowserTool(extractTool, {})).rejects.toThrow('could not find element');
   });
+
+  it("throws when extracted element has no text content", async () => {
+    mockPage.$ = vi.fn().mockResolvedValue({ textContent: vi.fn().mockResolvedValue(null) });
+    const extractTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "extract", selector: "img" },
+      ]},
+    };
+    await expect(executeBrowserTool(extractTool, {})).rejects.toThrow("has no text content");
+  });
+
+  it("throws when fill step has paramRef but arg is not provided", async () => {
+    const fillTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "fill", selector: "input[name=email]", paramRef: "email" },
+      ]},
+    };
+    // Note: no "email" in args
+    await expect(executeBrowserTool(fillTool, {})).rejects.toThrow('references paramRef "email" but it was not provided');
+  });
+
+  it("throws when fill step is missing selector", async () => {
+    const badTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "fill", value: "text" },
+      ]},
+    };
+    await expect(executeBrowserTool(badTool, {})).rejects.toThrow('fill step in tool "login" is missing required "selector"');
+  });
+
+  it("throws when click step is missing selector", async () => {
+    const badTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "click" },
+      ]},
+    };
+    await expect(executeBrowserTool(badTool, {})).rejects.toThrow('click step in tool "login" is missing required "selector"');
+  });
+
+  it("throws when waitFor step is missing selector", async () => {
+    const badTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "waitFor" },
+      ]},
+    };
+    await expect(executeBrowserTool(badTool, {})).rejects.toThrow('waitFor step in tool "login" is missing required "selector"');
+  });
 });

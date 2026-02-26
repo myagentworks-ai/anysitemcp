@@ -22,7 +22,15 @@ export async function executeBrowserTool(
           break;
         case "fill": {
           if (!step.selector) throw new Error(`fill step in tool "${tool.name}" is missing required "selector"`);
-          const value = step.paramRef ? String(args[step.paramRef] ?? "") : step.value ?? "";
+          let value: string;
+          if (step.paramRef) {
+            if (args[step.paramRef] === undefined) {
+              throw new Error(`fill step in tool "${tool.name}" references paramRef "${step.paramRef}" but it was not provided in args`);
+            }
+            value = String(args[step.paramRef]);
+          } else {
+            value = step.value ?? "";
+          }
           await page.fill(step.selector, value);
           break;
         }
@@ -38,7 +46,9 @@ export async function executeBrowserTool(
           const selector = step.selector ?? "body";
           const el = await page.$(selector);
           if (!el) throw new Error(`extract step in tool "${tool.name}" could not find element: "${selector}"`);
-          extractedContent = await el.textContent() ?? null;
+          const text = await el.textContent();
+          if (text === null) throw new Error(`extract step in tool "${tool.name}" found element "${selector}" but it has no text content`);
+          extractedContent = text;
           break;
         }
         default: {
