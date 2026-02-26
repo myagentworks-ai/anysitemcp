@@ -117,6 +117,58 @@ function StatusDot({ status, isLive }: { status: IntegrationRecord["status"]; is
 }
 
 // ---------------------------------------------------------------------------
+// ToolCallPanel — ready-to-use call snippet for this integration
+// ---------------------------------------------------------------------------
+
+function ToolCallPanel({ integrationName }: { integrationName: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const snippet = `const res = await fetch("/api/integrations/${integrationName}/call", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    tool: "tool_name",
+    params: { key: "value" },
+  }),
+});
+const { result } = await res.json();`;
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(snippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-dashed border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold tracking-wide uppercase text-gray-400">
+          Tool Call
+        </span>
+        <span className="text-[11px] text-gray-300">
+          replace <code className="font-mono">tool_name</code> and <code className="font-mono">params</code>
+        </span>
+      </div>
+      <div className="relative group">
+        <pre className="bg-gray-900 text-gray-200 rounded-lg px-3 py-2.5 overflow-x-auto leading-relaxed font-mono text-[11px]">
+          <code>{snippet}</code>
+        </pre>
+        <button
+          onClick={copy}
+          className={`absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded transition-all ${
+            copied
+              ? "bg-emerald-600 text-white"
+              : "bg-gray-700 text-gray-300 opacity-0 group-hover:opacity-100 hover:bg-gray-600"
+          }`}
+        >
+          {copied ? "✓ copied" : "copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // ToolEntry — tool metadata + copy-able code snippet
 // ---------------------------------------------------------------------------
 
@@ -205,6 +257,7 @@ function IntegrationCard({
   const [tools, setTools] = useState<ToolDefinition[] | null>(null);
   const [toolsIsStored, setToolsIsStored] = useState(false);
   const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolCallOpen, setToolCallOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
 
   const isLive = integration.isLive && integration.status === "connected";
@@ -297,6 +350,16 @@ function IntegrationCard({
 
           {/* Action buttons */}
           <div className="flex items-center gap-3 shrink-0 pt-0.5">
+            <button
+              onClick={() => setToolCallOpen((o) => !o)}
+              className={`text-xs transition-colors ${
+                toolCallOpen
+                  ? "text-violet-600 font-medium"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              tool call
+            </button>
             {integration.toolCount > 0 && (
               <button
                 onClick={toggleTools}
@@ -333,6 +396,11 @@ function IntegrationCard({
             </button>
           </div>
         </div>
+
+        {/* Tool call panel */}
+        {toolCallOpen && (
+          <ToolCallPanel integrationName={integration.name} />
+        )}
 
         {/* Expanded tools */}
         {tools && (
@@ -449,8 +517,6 @@ export default function IntegrationsPage() {
   const liveCount = integrations.filter((i) => i.isLive && i.status === "connected").length;
   const savedCount = integrations.length;
   const withNotesCount = integrations.filter((i) => i.notes?.trim()).length;
-
-  const firstLive = integrations.find((i) => i.isLive && i.status === "connected");
 
   return (
     <main className="max-w-3xl mx-auto py-10 px-4">
@@ -605,27 +671,6 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Code snippet                                                        */}
-      {/* ------------------------------------------------------------------ */}
-      {firstLive && (
-        <div className="mt-8 border rounded-xl p-5 bg-gray-50">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">
-            Call a tool from your app
-          </h2>
-          <pre className="text-xs bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto leading-relaxed">
-            <code>{`const res = await fetch("/api/integrations/${firstLive.name}/call", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    tool: "tool_name",
-    params: { key: "value" },
-  }),
-});
-const { result } = await res.json();`}</code>
-          </pre>
-        </div>
-      )}
     </main>
   );
 }
