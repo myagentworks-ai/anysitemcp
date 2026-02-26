@@ -16,19 +16,22 @@ export interface StartServerOptions {
 export async function startServer(options: StartServerOptions): Promise<void> {
   const { url, transport = "stdio", port = 4000, skipLlm = false, onProgress } = options;
 
-  onProgress?.(1, "Detecting API spec...");
-  onProgress?.(2, "Analyzing HTML...");
-  onProgress?.(3, "Enriching with LLM...");
-
-  const result = await discover(url, { skipLlm });
+  const result = await discover(url, { skipLlm, onProgress });
 
   console.error(`Discovered ${result.tools.length} tools via ${result.discoveredVia}`);
 
   const server = createMcpServer(result.tools);
 
-  if (transport === "http") {
-    await connectHttp(server, port);
-  } else {
-    await connectStdio(server);
+  switch (transport) {
+    case "http":
+      await connectHttp(server, port);
+      break;
+    case "stdio":
+      await connectStdio(server);
+      break;
+    default: {
+      const _exhaustive: never = transport;
+      throw new Error(`Unknown transport: ${_exhaustive}`);
+    }
   }
 }

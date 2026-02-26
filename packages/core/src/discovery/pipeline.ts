@@ -7,6 +7,7 @@ import type { DiscoveryResult } from "../types.js";
 export interface DiscoverOptions {
   fetchFn?: typeof fetch;
   skipLlm?: boolean;
+  onProgress?: (stage: 1 | 2 | 3, message: string) => void;
 }
 
 export async function discover(
@@ -14,8 +15,10 @@ export async function discover(
   options: DiscoverOptions = {}
 ): Promise<DiscoveryResult> {
   const fetchFn = options.fetchFn ?? fetch;
+  const { onProgress } = options;
 
   // Stage 1: API spec detection
+  onProgress?.(1, "Detecting API spec...");
   const spec = await detectApiSpec(url, fetchFn);
   if (spec) {
     const tools = parseOpenApiSpec(spec, url);
@@ -25,6 +28,7 @@ export async function discover(
   }
 
   // Stage 2: HTML analysis
+  onProgress?.(2, "Analyzing HTML...");
   const pageRes = await fetchFn(url);
   if (!pageRes.ok) {
     return { tools: [], sourceUrl: url, discoveredVia: "html" };
@@ -53,6 +57,7 @@ export async function discover(
     return { tools, sourceUrl: url, discoveredVia: "html" };
   }
 
+  onProgress?.(3, "Enriching with LLM...");
   const tools = await enrichWithLlm(candidates, url, html);
   return { tools, sourceUrl: url, discoveredVia: "hybrid" };
 }

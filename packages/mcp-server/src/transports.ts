@@ -9,17 +9,39 @@ export async function connectStdio(server: McpServer): Promise<void> {
   console.error("WebMCP server running on stdio");
 }
 
+const BODY_SIZE_LIMIT = 1_048_576; // 1 MB
+
 export async function connectHttp(server: McpServer, port: number): Promise<void> {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
   const httpServer = createServer(async (req, res) => {
     if (req.url === "/mcp") {
       let body = "";
+      let byteLength = 0;
       req.on("data", (chunk: Buffer) => {
+        byteLength += chunk.length;
+        if (byteLength > BODY_SIZE_LIMIT) {
+          res.writeHead(413, { "Content-Type": "application/json" }).end(
+            JSON.stringify({ error: "Request body too large" })
+          );
+          req.destroy();
+          return;
+        }
         body += chunk.toString();
       });
       req.on("end", async () => {
-        const parsed = body ? JSON.parse(body) : undefined;
+        if (res.writableEnded) return;
+        let parsed: unknown;
+        if (body) {
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(
+              JSON.stringify({ error: "Invalid JSON" })
+            );
+            return;
+          }
+        }
         await transport.handleRequest(req, res, parsed);
       });
     } else {
