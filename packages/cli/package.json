@@ -1,0 +1,18 @@
+{
+  "name": "@webmcp/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "webmcp": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "@webmcp/core": "workspace:*",
+    "@webmcp/mcp-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
