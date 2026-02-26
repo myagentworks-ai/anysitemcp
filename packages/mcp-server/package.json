@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",
-    "@webmcp/core": "workspace:*"
+    "@webmcp/core": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "vitest": "^1.4.0",
