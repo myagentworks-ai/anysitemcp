@@ -29,7 +29,12 @@ export async function executeBrowserTool(
             }
             value = String(args[step.paramRef]);
           } else {
-            value = step.value ?? "";
+            if (!step.value) {
+              throw new Error(
+                `fill step in tool "${tool.name}" requires either "paramRef" or "value"`
+              );
+            }
+            value = step.value;
           }
           await page.fill(step.selector, value);
           break;

@@ -214,4 +214,17 @@ describe("executeBrowserTool", () => {
     };
     await expect(executeBrowserTool(badTool, {})).rejects.toThrow('waitFor step in tool "login" is missing required "selector"');
   });
+
+  it("throws when fill step has neither paramRef nor value", async () => {
+    const badTool: ToolDefinition = {
+      ...loginTool,
+      browserConfig: { steps: [
+        { action: "navigate", value: "https://example.com" },
+        { action: "fill", selector: "input[name=email]" },
+      ]},
+    };
+    await expect(executeBrowserTool(badTool, {})).rejects.toThrow(
+      'fill step in tool "login" requires either "paramRef" or "value"'
+    );
+  });
 });
