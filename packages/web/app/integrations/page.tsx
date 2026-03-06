@@ -339,10 +339,47 @@ function IntegrationCard({
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolCallOpen, setToolCallOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [mcpServer, setMcpServer] = useState<{
+    id: string;
+    connectionString: string;
+    status: string;
+  } | null>(null);
+  const [mcpStarting, setMcpStarting] = useState(false);
+  const [mcpCopied, setMcpCopied] = useState(false);
 
   const isLive = integration.isLive && integration.status === "connected";
   const isError = integration.status === "error";
   const isSavedOffline = !integration.isLive;
+
+  const startMcp = async () => {
+    setMcpStarting(true);
+    try {
+      const port = 4000 + Math.floor(Math.random() * 900);
+      const res = await fetch("/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: integration.url, port }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMcpServer({
+          id: data.id,
+          connectionString: data.connectionString,
+          status: data.status,
+        });
+      }
+    } catch {
+      /* silently fail */
+    } finally {
+      setMcpStarting(false);
+    }
+  };
+
+  const stopMcp = async () => {
+    if (!mcpServer) return;
+    await fetch(`/api/servers/${mcpServer.id}`, { method: "DELETE" });
+    setMcpServer(null);
+  };
 
   const toggleTools = async () => {
     if (tools) {
@@ -458,6 +495,17 @@ function IntegrationCard({
             >
               notes
             </button>
+            <button
+              onClick={mcpServer ? stopMcp : startMcp}
+              disabled={mcpStarting}
+              className={`text-xs transition-colors disabled:opacity-50 ${
+                mcpServer
+                  ? "text-emerald-600 hover:text-red-400 font-medium"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {mcpStarting ? "starting…" : mcpServer ? "stop mcp" : "start mcp"}
+            </button>
             {isSavedOffline && (
               <button
                 onClick={() => onReconnect(integration)}
@@ -503,6 +551,49 @@ function IntegrationCard({
 
         {/* Notes */}
         {notesOpen && <NotesEditor integration={integration} onSaved={onRefresh} />}
+
+        {/* MCP Server panel */}
+        {(mcpServer || mcpStarting) && (
+          <div className="mt-3 pt-3 border-t border-dashed border-emerald-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold tracking-wide uppercase text-emerald-500">
+                MCP Server
+              </span>
+              {mcpStarting ? (
+                <span className="text-[11px] text-gray-400">Starting…</span>
+              ) : mcpServer ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="relative inline-flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                  <span className="text-[11px] text-emerald-500">{mcpServer.status}</span>
+                </span>
+              ) : null}
+            </div>
+            {mcpServer && (
+              <div className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
+                <span className="font-mono text-[11px] text-emerald-300 flex-1 truncate">
+                  {mcpServer.connectionString}
+                </span>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(mcpServer.connectionString);
+                    setMcpCopied(true);
+                    setTimeout(() => setMcpCopied(false), 2000);
+                  }}
+                  className={`shrink-0 text-[10px] px-2 py-0.5 rounded transition-all ${
+                    mcpCopied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  }`}
+                >
+                  {mcpCopied ? "✓ copied" : "copy"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

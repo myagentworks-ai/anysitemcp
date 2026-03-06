@@ -6,7 +6,7 @@ AnySiteMCP analyzes any URL and automatically generates a [Model Context Protoco
 
 ---
 
-## What's New in v0.1b
+## What's New in v0.1c
 
 | Feature | Description |
 |---|---|
@@ -17,6 +17,9 @@ AnySiteMCP analyzes any URL and automatically generates a [Model Context Protoco
 | **Notes** | Per-integration markdown notes, persisted to disk |
 | **Offline Tools** | Tool definitions survive server restarts — stored integrations show "(last known)" tools |
 | **Reconnect** | One-click reconnect for integrations that have gone offline |
+| **Tool Parameter Schemas** | Each tool displays a parameter table (name, type, required, description) before the code snippet |
+| **Start MCP Server** | Launch a live MCP proxy for any integration directly from its card — copy the connection string and stop it when done |
+| **Undo Delete** | Removing an integration shows a 5-second undo toast — the DELETE is only committed if you don't undo |
 
 ---
 
@@ -159,10 +162,11 @@ The Integration Hub lists all saved integrations and their live status. Each car
 | Button | What it does |
 |---|---|
 | **tool call** | Opens an inline code panel with a generic `fetch` snippet for calling any tool on this integration — copy and paste into your app |
-| **tools** | Expands the full tool list. Each tool shows its transport type, name, description, and a pre-filled `fetch` snippet ready to copy |
+| **tools** | Expands the full tool list. Each tool shows its transport type, name, description, a parameter schema table, and a pre-filled `fetch` snippet ready to copy |
 | **notes** | Opens a free-text notes editor for this integration, persisted to disk |
+| **start mcp** | Spawns a live MCP proxy server for this integration's URL on a random port (4000–4899). The connection string (e.g. `http://localhost:4551/mcp`) appears inline with a copy button. Click **stop mcp** to shut it down. |
 | **reconnect** | Re-runs the MCP connect for integrations with `saved` status (offline after a restart) |
-| **✕** | Removes the integration from the hub and deletes it from the persisted store |
+| **✕** | Optimistically removes the integration and shows a 5-second **Undo** toast. The DELETE is only committed if Undo is not clicked. |
 
 #### Offline / restart behaviour
 
@@ -413,6 +417,12 @@ anysitemcp/
 ---
 
 ## Changelog
+
+### v0.1c — MCP Launch, Undo Delete, Tool Schemas
+- Added **Start MCP Server** button on each integration card — spawns a live MCP proxy on a random port, shows the connection string inline, and allows one-click stop
+- Added **Undo Delete** — removing an integration is optimistic with a 5-second undo toast; the DELETE API is only called if undo is not clicked
+- Added **tool parameter schema tables** in the expanded tools panel — shows parameter name, type, required status, and description before each code snippet
+- Code snippets in the tools panel now pre-fill required parameters with typed defaults
 
 ### v0.1b — Integration Hub + Persistence
 - Added Integration Hub dashboard (`/integrations`) with full CRUD for saved integrations
