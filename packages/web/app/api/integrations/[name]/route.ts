@@ -73,6 +73,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         name: t.name,
         description: t.description ?? "",
         transport: t.transport,
+        inputSchema: t.inputSchema,
       })),
     });
     updateNotes(name, notes);

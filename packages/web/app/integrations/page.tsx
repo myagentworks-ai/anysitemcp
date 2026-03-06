@@ -19,10 +19,17 @@ interface IntegrationRecord {
   lastStatus?: "connected" | "error";
 }
 
+interface JSONSchema {
+  type: string;
+  properties?: Record<string, { type: string; description?: string }>;
+  required?: string[];
+}
+
 interface ToolDefinition {
   name: string;
   description: string;
   transport: "http" | "browser";
+  inputSchema?: JSONSchema;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,8 +176,40 @@ const { result } = await res.json();`;
 }
 
 // ---------------------------------------------------------------------------
-// ToolEntry — tool metadata + copy-able code snippet
+// ToolEntry — tool metadata + params table + copy-able code snippet
 // ---------------------------------------------------------------------------
+
+function defaultForType(type: string): string {
+  switch (type) {
+    case "number":
+    case "integer":
+      return "0";
+    case "boolean":
+      return "false";
+    case "array":
+      return "[]";
+    case "object":
+      return "{}";
+    default:
+      return '""';
+  }
+}
+
+function buildParamsSnippet(schema: JSONSchema | undefined): string {
+  if (!schema?.properties || Object.keys(schema.properties).length === 0) {
+    return "{}";
+  }
+  const lines = Object.entries(schema.properties).map(([key, prop]) => {
+    const isRequired = schema.required?.includes(key) ?? false;
+    const comment = isRequired
+      ? "  // required"
+      : prop.description
+      ? `  // ${prop.description}`
+      : "";
+    return `      ${key}: ${defaultForType(prop.type)},${comment}`;
+  });
+  return `{\n${lines.join("\n")}\n    }`;
+}
 
 function ToolEntry({
   tool,
@@ -181,12 +220,17 @@ function ToolEntry({
 }) {
   const [copied, setCopied] = useState(false);
 
+  const paramsSnippet = buildParamsSnippet(tool.inputSchema);
+  const hasParams =
+    !!tool.inputSchema?.properties &&
+    Object.keys(tool.inputSchema.properties).length > 0;
+
   const snippet = `const res = await fetch("/api/integrations/${integrationName}/call", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     tool: "${tool.name}",
-    params: {},
+    params: ${paramsSnippet},
   }),
 });
 const { result } = await res.json();`;
@@ -217,6 +261,42 @@ const { result } = await res.json();`;
           )}
         </div>
       </div>
+
+      {/* Parameters table */}
+      {hasParams && (
+        <div className="mb-2.5 overflow-x-auto">
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr className="text-left text-gray-400 border-b border-gray-100">
+                <th className="pb-1 pr-4 font-medium">Parameter</th>
+                <th className="pb-1 pr-4 font-medium">Type</th>
+                <th className="pb-1 pr-4 font-medium">Req</th>
+                <th className="pb-1 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(tool.inputSchema!.properties!).map(([key, prop]) => {
+                const isRequired = tool.inputSchema?.required?.includes(key) ?? false;
+                return (
+                  <tr key={key} className="border-b border-gray-50">
+                    <td className="py-1 pr-4 font-mono text-gray-800 whitespace-nowrap">{key}</td>
+                    <td className="py-1 pr-4 font-mono text-blue-500 whitespace-nowrap">{prop.type}</td>
+                    <td className="py-1 pr-4">
+                      {isRequired ? (
+                        <span className="text-red-400 font-semibold">✓</span>
+                      ) : (
+                        <span className="text-gray-200">—</span>
+                      )}
+                    </td>
+                    <td className="py-1 text-gray-400">{prop.description ?? ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Code snippet */}
       <div className="relative group">
         <pre className="bg-gray-900 text-gray-200 rounded-lg px-3 py-2.5 overflow-x-auto leading-relaxed font-mono text-[11px]">
@@ -432,10 +512,16 @@ function IntegrationCard({
 // Page
 // ---------------------------------------------------------------------------
 
+interface PendingDelete {
+  integration: IntegrationRecord;
+  timerId: ReturnType<typeof setTimeout>;
+}
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
   // Add-integration form
   const [name, setName] = useState("");
@@ -504,13 +590,42 @@ export default function IntegrationsPage() {
     }
   };
 
-  const remove = async (integrationName: string) => {
-    try {
-      await fetch(`/api/integrations/${integrationName}`, { method: "DELETE" });
-      await load();
-    } catch {
-      setPageError("Failed to remove integration");
+  const remove = (integrationName: string) => {
+    const target = integrations.find((i) => i.name === integrationName);
+    if (!target) return;
+
+    // Cancel any existing pending delete first
+    if (pendingDelete) {
+      clearTimeout(pendingDelete.timerId);
+      // Commit the previous pending delete immediately
+      fetch(`/api/integrations/${pendingDelete.integration.name}`, { method: "DELETE" }).catch(() => {});
     }
+
+    // Optimistically remove from list
+    setIntegrations((prev) => prev.filter((i) => i.name !== integrationName));
+
+    const timerId = setTimeout(async () => {
+      try {
+        await fetch(`/api/integrations/${integrationName}`, { method: "DELETE" });
+      } catch {
+        setPageError("Failed to remove integration");
+        await load();
+      }
+      setPendingDelete(null);
+    }, 5000);
+
+    setPendingDelete({ integration: target, timerId });
+  };
+
+  const undoDelete = () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timerId);
+    // Restore the integration back into the list in its original position
+    setIntegrations((prev) => {
+      const restored = [...prev, pendingDelete.integration];
+      return restored;
+    });
+    setPendingDelete(null);
   };
 
   // Derived stats
@@ -668,6 +783,25 @@ export default function IntegrationsPage() {
               reconnecting={reconnectingName === integration.name}
             />
           ))}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Undo delete toast                                                   */}
+      {/* ------------------------------------------------------------------ */}
+      {pendingDelete && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-3 bg-gray-900 text-white text-sm px-4 py-3 rounded-xl shadow-xl">
+            <span className="text-gray-300">
+              Removed <span className="font-semibold text-white">{pendingDelete.integration.name}</span>
+            </span>
+            <button
+              onClick={undoDelete}
+              className="px-3 py-1 rounded-lg bg-white text-gray-900 font-semibold text-xs hover:bg-gray-100 transition-colors"
+            >
+              Undo
+            </button>
+          </div>
         </div>
       )}
 

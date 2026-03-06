@@ -89,6 +89,7 @@ export async function POST(req: Request) {
       name: t.name,
       description: t.description ?? "",
       transport: t.transport,
+      inputSchema: t.inputSchema,
     })),
   });
 

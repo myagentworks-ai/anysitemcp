@@ -5,10 +5,22 @@ import path from "path";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface StoredToolProperty {
+  type: string;
+  description?: string;
+}
+
+export interface StoredToolSchema {
+  type: string;
+  properties?: Record<string, StoredToolProperty>;
+  required?: string[];
+}
+
 export interface StoredTool {
   name: string;
   description: string;
   transport: string;
+  inputSchema?: StoredToolSchema;
 }
 
 export interface StoredIntegration {

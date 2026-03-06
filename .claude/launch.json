@@ -5,13 +5,13 @@
       "name": "web-dev",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "web", "dev"],
-      "port": 3000
+      "port": 3777
     },
     {
       "name": "web-prod",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "web", "start"],
-      "port": 3000
+      "port": 3777
     }
   ]
 }
