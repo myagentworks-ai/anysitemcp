@@ -6,20 +6,15 @@ AnySiteMCP analyzes any URL and automatically generates a [Model Context Protoco
 
 ---
 
-## What's New in v0.1c
+## What's New in v0.1d
 
 | Feature | Description |
 |---|---|
-| **Integration Hub** | Persistent dashboard to save, manage, and reconnect integrations across server restarts |
-| **Save from Home** | Analyze any URL then save it as a named integration in one click |
-| **Per-tool Code Snippets** | Every discovered tool shows a ready-to-copy `fetch` snippet |
-| **Tool Call Panel** | Per-integration generic call snippet with placeholder substitution |
-| **Notes** | Per-integration markdown notes, persisted to disk |
-| **Offline Tools** | Tool definitions survive server restarts — stored integrations show "(last known)" tools |
-| **Reconnect** | One-click reconnect for integrations that have gone offline |
-| **Tool Parameter Schemas** | Each tool displays a parameter table (name, type, required, description) before the code snippet |
-| **Start MCP Server** | Launch a live MCP proxy for any integration directly from its card — copy the connection string and stop it when done |
-| **Undo Delete** | Removing an integration shows a 5-second undo toast — the DELETE is only committed if you don't undo |
+| **Light & Dark Theme** | Full light/dark mode with a slate-based palette, sky-blue accents, and CSS custom properties |
+| **Theme Toggle** | One-click toggle in the navbar switches between light and dark mode |
+| **Slate Palette** | Blue-gray slate tones replace neutral grays for a sharper, developer-tool aesthetic |
+| **Always-dark Code Blocks** | Code and connection-string panels stay dark in both light and dark mode for readability |
+| **Accessible Contrast** | All text meets WCAG 4.5:1 minimum contrast ratios in both modes |
 
 ---
 
@@ -417,6 +412,16 @@ anysitemcp/
 ---
 
 ## Changelog
+
+### v0.1d — Light & Dark Theme Redesign
+- Introduced full light/dark mode with a slate-based palette (`slate-50` → `slate-950`) replacing neutral grays
+- Sky-blue accent color (`sky-`) for active nav links, focus rings, and transport badges
+- CSS custom properties (`--background`, `--foreground`) drive theme switching via `.dark` class on `<html>`
+- Always-dark code blocks (`bg-slate-950`) for readability in both modes
+- Theme toggle button in the navbar with sun/moon SVG icons
+- Inverted primary action buttons adapt correctly per theme (dark in light mode, light in dark mode)
+- Inline `borderLeftColor` fix for integration status pills to avoid Tailwind dark-mode cascade conflict
+- Accessible contrast: all text meets WCAG 4.5:1 minimum in both modes
 
 ### v0.1c — MCP Launch, Undo Delete, Tool Schemas
 - Added **Start MCP Server** button on each integration card — spawns a live MCP proxy on a random port, shows the connection string inline, and allows one-click stop

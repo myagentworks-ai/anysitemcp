@@ -12,8 +12,16 @@ export interface ServerInstance {
   process?: ChildProcess;
 }
 
-// In-memory store (resets on server restart — acceptable for v1)
-const instances = new Map<string, ServerInstance>();
+// In-memory store — pinned to globalThis so that Next.js Turbopack HMR
+// re-evaluation of this module does not wipe running server state.
+declare global {
+  // eslint-disable-next-line no-var
+  var __mcp_instances: Map<string, ServerInstance> | undefined;
+}
+if (!globalThis.__mcp_instances) {
+  globalThis.__mcp_instances = new Map<string, ServerInstance>();
+}
+const instances: Map<string, ServerInstance> = globalThis.__mcp_instances;
 
 export function getAll(): ServerInstance[] {
   return Array.from(instances.values()).map(({ process: _, ...rest }) => rest);
@@ -41,7 +49,7 @@ export function stopInstance(id: string): boolean {
   const instance = instances.get(id);
   if (!instance) return false;
   instance.process?.kill();
-  instance.status = "stopped";
+  instances.delete(id);
   return true;
 }
 
@@ -99,7 +107,7 @@ export async function spawnForInstance(instance: ServerInstance): Promise<void> 
   });
 
   child.on("exit", () => {
-    instance.status = "stopped";
+    instances.delete(instance.id);
   });
 
   // Wait briefly for startup
