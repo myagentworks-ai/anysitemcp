@@ -100,78 +100,215 @@ pnpm build
 
 ---
 
-## Web Dashboard
+## Quick Start
 
-The web dashboard is the primary interface for AnySiteMCP. It combines a live URL analyzer with a full Integration Hub for managing saved sites.
-
-### Start the dashboard
+The fastest way to go from a URL to a working MCP server is through the web dashboard.
 
 ```bash
-# 1. Add your Anthropic API key
+# 1. Set your Anthropic API key
 echo "ANTHROPIC_API_KEY=sk-ant-..." > packages/web/.env.local
 
-# 2. Start the dev server
+# 2. Start the dashboard
 pnpm dev:web
 ```
 
-Open **[http://localhost:3000](http://localhost:3000)**.
+Open **[http://localhost:3000](http://localhost:3000)** and follow the steps below.
 
 ---
 
-### Analyze any URL
+## Using the Web Dashboard
 
-1. Enter any URL in the home page input and click **Analyze**
-2. The 3-stage discovery pipeline runs with real-time progress streaming
-3. Discovered tools appear as an expandable list — each tool shows its name, description, and HTTP transport
-4. A **Save as Integration** panel appears below the tool list once discovery is complete
+### Step 1 — Analyze a URL
+
+1. Paste any URL into the input on the home page and click **Analyze**
+2. The 3-stage discovery pipeline runs with live progress output:
+   - **Stage 1** — looks for OpenAPI / Swagger specs linked from the page
+   - **Stage 2** — scrapes forms, links, and interactive elements
+   - **Stage 3** — Claude generates rich, semantic tool definitions from the raw candidates
+3. Discovered tools appear as an expandable list showing name, description, and transport type
+
+> **Tip:** Point AnySiteMCP at API documentation pages (e.g. `https://stripe.com/docs/api`, `https://docs.github.com/en/rest`) for the richest tool discovery. It also works on any site with forms or interactive elements.
 
 ---
 
-### Save as Integration
+### Step 2 — Save as Integration
 
-After analyzing a URL:
+Once analysis finishes a **Save as Integration** panel appears below the tool list:
 
-1. The **Save as Integration** panel auto-fills the integration name from the URL hostname (e.g. `https://stripe.com/docs` → `stripe`)
-2. Optionally add a description
-3. Click **Save to Integrations** — this runs the full MCP connect and persists the integration to disk
-4. A confirmation banner links directly to the Integration Hub
+1. The integration name is auto-filled from the URL hostname — edit it if needed
+2. Add an optional description
+3. Click **Save to Integrations** — this runs the full MCP connect and writes the integration to disk
 
-Saved integrations survive server restarts and reappear in the Integration Hub automatically.
+Saved integrations persist across server restarts and reappear in the Integration Hub automatically.
+
+---
+
+### Step 3 — Launch an MCP Server
+
+Open the **Integration Hub** at `/integrations` and find your saved integration. Click **start mcp** on its card:
+
+- A live MCP proxy starts on a random port (4000–4899)
+- The connection string (e.g. `http://localhost:4551/mcp`) appears inline with a copy button
+- Click **stop mcp** to shut it down when you're done
+
+Copy the connection string and use it in any MCP-compatible AI agent (see [Connecting AI Agents](#connecting-ai-agents) below).
 
 ---
 
 ### Integration Hub (`/integrations`)
 
-The Integration Hub lists all saved integrations and their live status. Each card shows:
+The Integration Hub lists all saved integrations with their live status.
 
 | Field | Description |
 |---|---|
 | **Name** | Slug identifier used in API calls |
 | **URL** | The source URL that was analyzed |
 | **Tool count** | Number of tools discovered |
-| **Status** | `connected` (live in this process) or `saved` (persisted, offline) |
+| **Status** | `connected` — live in this process / `saved` — persisted, offline |
 | **Connected at** | Timestamp of the last successful connection |
 
-#### Per-integration actions
+#### Actions on each card
 
 | Button | What it does |
 |---|---|
-| **tool call** | Opens an inline code panel with a generic `fetch` snippet for calling any tool on this integration — copy and paste into your app |
-| **tools** | Expands the full tool list. Each tool shows its transport type, name, description, a parameter schema table, and a pre-filled `fetch` snippet ready to copy |
-| **notes** | Opens a free-text notes editor for this integration, persisted to disk |
-| **start mcp** | Spawns a live MCP proxy server for this integration's URL on a random port (4000–4899). The connection string (e.g. `http://localhost:4551/mcp`) appears inline with a copy button. Click **stop mcp** to shut it down. |
-| **reconnect** | Re-runs the MCP connect for integrations with `saved` status (offline after a restart) |
-| **✕** | Optimistically removes the integration and shows a 5-second **Undo** toast. The DELETE is only committed if Undo is not clicked. |
+| **tool call** | Shows a ready-to-copy `fetch` snippet for calling any tool on this integration |
+| **tools** | Expands the full tool list — each tool shows its name, description, parameter schema table, transport type, and a pre-filled `fetch` code snippet |
+| **notes** | Opens a markdown notes editor for this integration, persisted to disk |
+| **start mcp** | Spawns a live MCP proxy on a random port; shows the connection string with a copy button |
+| **reconnect** | Re-runs the MCP connect for `saved` (offline) integrations |
+| **✕** | Removes the integration with a 5-second **Undo** toast — the DELETE only commits if you don't undo |
 
-#### Offline / restart behaviour
+#### After a server restart
 
-When the server restarts, previously saved integrations are restored from `packages/web/data/integrations.json` with status `saved`. Their tool definitions were persisted at save time, so the **tools** panel still works and shows a "(last known)" amber notice. Click **reconnect** to bring them back live.
+Previously saved integrations reload from `packages/web/data/integrations.json` with status `saved`. Their tool definitions were stored at save time, so the **tools** panel still works — you'll see a "(last known)" amber notice. Click **reconnect** to bring them back live.
+
+---
+
+## Connecting AI Agents
+
+Once you have a running MCP server (from **start mcp** or the CLI), plug the connection string into any MCP-compatible client.
+
+### Claude Desktop (stdio — recommended for local use)
+
+Edit your `claude_desktop_config.json` (usually at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "stripe": {
+      "command": "node",
+      "args": [
+        "/path/to/anysitemcp/packages/cli/dist/index.js",
+        "serve",
+        "https://stripe.com/docs"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop — it will have all discovered tools available as native MCP tools. You can add multiple sites as separate entries.
+
+### Claude Desktop (HTTP/SSE — use the dashboard's start mcp)
+
+If you prefer to manage servers from the dashboard rather than the config file:
+
+1. Click **start mcp** on an integration card — note the connection string (e.g. `http://localhost:4551/mcp`)
+2. In `claude_desktop_config.json`, add an HTTP entry:
+
+```json
+{
+  "mcpServers": {
+    "stripe": {
+      "url": "http://localhost:4551/mcp"
+    }
+  }
+}
+```
+
+3. Restart Claude Desktop
+
+### Claude Code
+
+Add the server as an MCP remote in your project or user config:
+
+```bash
+claude mcp add stripe --url http://localhost:4551/mcp
+```
+
+Or add it to `.claude/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "stripe": {
+      "url": "http://localhost:4551/mcp"
+    }
+  }
+}
+```
+
+### Any MCP-compatible client (HTTP/SSE)
+
+Any client that supports the MCP HTTP/SSE transport can connect using the URL shown by **start mcp**:
+
+```
+http://localhost:<port>/mcp
+```
+
+The server speaks the standard MCP protocol — tool listing, tool calls, and streaming results all work out of the box.
+
+---
+
+## CLI
+
+Use the CLI for scripting, automation, or headless environments where the web dashboard isn't needed.
+
+### Preview discovered tools for a URL
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js analyze https://httpbin.org
+```
+
+This runs the full 3-stage pipeline and prints all discovered tools to stdout — no server is started.
+
+### Serve as an MCP server over stdio
+
+For use directly with Claude Desktop or any stdio MCP client:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js serve https://httpbin.org
+```
+
+### Serve as an MCP server over HTTP
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js serve https://httpbin.org --transport http --port 4001
+# → AnySiteMCP server running at http://localhost:4001/mcp
+```
+
+### CLI options
+
+```
+analyze <url>
+  --skip-llm    Skip LLM enrichment (faster, fewer tools)
+
+serve <url>
+  --transport   stdio (default) | http
+  --port        Port for HTTP transport (default: 4000)
+  --skip-llm    Skip LLM enrichment
+```
+
+> **When to use `--skip-llm`:** If the target URL has a machine-readable OpenAPI spec, Stage 3 enrichment adds little value and you can skip it to save time and API credits.
 
 ---
 
 ## REST API
 
-The web package exposes a REST API for programmatic integration management.
+The web package exposes a REST API for programmatic integration management. All endpoints are available at `http://localhost:3000/api/integrations`.
 
 ### `GET /api/integrations`
 
@@ -218,7 +355,7 @@ Connect a URL and save it as a named integration.
 
 ### `GET /api/integrations/:name`
 
-Returns the integration details including full tool definitions. Falls back to persisted tools for offline integrations (`isStored: true`).
+Returns integration details including full tool definitions. Falls back to persisted tools for offline integrations.
 
 ```jsonc
 {
@@ -237,7 +374,6 @@ Returns the integration details including full tool definitions. Falls back to p
 Update integration metadata (notes, description).
 
 ```jsonc
-// Request
 { "notes": "Used by the billing agent." }
 ```
 
@@ -257,75 +393,27 @@ Call a specific tool on a live integration.
 }
 
 // Response
-{
-  "result": { ... }
-}
+{ "result": { ... } }
 ```
 
 ---
 
-## CLI
+## Tips & Best Practices
 
-The CLI exposes the same discovery and serve capabilities without the web UI.
+**Choose the right URL**
+Point AnySiteMCP at API reference or documentation pages, not marketing homepages. Pages like `https://docs.github.com/en/rest` or `https://stripe.com/docs/api` yield far more tools than `https://github.com`.
 
-### Analyze a URL (preview tools)
+**Use `--skip-llm` for speed**
+If the target site has an OpenAPI spec (visible in Stage 1 output), skip LLM enrichment — the spec alone produces complete, accurate tool definitions in seconds.
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js analyze https://httpbin.org
-```
+**Keep the dashboard running for live connections**
+Integration cards show `connected` only while the Next.js process is running. The `start mcp` proxy also lives inside that process. For long-running agent workflows, run the dashboard in a persistent terminal session or deploy it to a server.
 
-### Serve as an MCP server over stdio
+**Save notes per integration**
+Use the **notes** button to document what each integration is for, which tools matter most, and any quirks — notes persist to disk and survive restarts.
 
-For use with **Claude Desktop** or any stdio-based MCP client:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js serve https://httpbin.org
-```
-
-### Serve as an MCP server over HTTP
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js serve https://httpbin.org --transport http --port 4001
-# → AnySiteMCP server running at http://localhost:4001/mcp
-```
-
-### Options
-
-```
-analyze <url>
-  --skip-llm    Skip LLM enrichment (faster, fewer tools)
-
-serve <url>
-  --transport   stdio (default) | http
-  --port        Port for HTTP transport (default: 4000)
-  --skip-llm    Skip LLM enrichment
-```
-
----
-
-## Use with Claude Desktop
-
-Add AnySiteMCP as an MCP server in your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "stripe": {
-      "command": "node",
-      "args": [
-        "/path/to/anysitemcp/packages/cli/dist/index.js",
-        "serve",
-        "https://stripe.com/docs"
-      ],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-..."
-      }
-    }
-  }
-}
-```
-
-Claude will have access to all discovered tools for that site as native MCP tools.
+**Multiple integrations, one dashboard**
+There's no limit on saved integrations. You can have dozens of sites analyzed and saved, each with their own MCP server spawned on demand from the dashboard.
 
 ---
 
